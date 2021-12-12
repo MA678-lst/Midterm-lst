@@ -54,6 +54,7 @@ Then, I checked the correlations of these variables, only 14 variables have high
   
 Finally, I got the cleaned data set with 167988 observations, the variables I used to do the analysis are:
 \newpage  
+
 | column names                   | explanation |
 | :--:                           | :-----         |
 | listing_id                     | House ID|
