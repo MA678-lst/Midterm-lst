@@ -19,7 +19,8 @@ tidyverse,
 gridExtra,
 lme4,
 lmerTest,
-coefplot
+coefplot,
+GGally
 )
 ```
 
@@ -192,8 +193,8 @@ When rating scores increases, the rent price increases. And in four types of roo
 ### Model Validation
 
 ```{r,echo=FALSE, fig.height=2.5, fig.width=6, fig.cap="Residual plot and Q-Q plot."}
-resi <- plot(mllm)
-qq <- qqmath(mllm) 
+resi <- plot(model)
+qq <- qqmath(model) 
 grid.arrange(resi,qq,nrow=1)
 ```
 From the residual plot, we can see most points are around 0, but it also shows some limits on the residual points, it may because the rent price can not be very high or very low, so the fitted model has shrink effect. It also influent the QQ plot, we can see when price becomes high, the point goes away from lines.
@@ -204,6 +205,8 @@ From the residual plot, we can see most points are around 0, but it also shows s
 In this model, the room type and rating scores show significant impacts on price, and their coefficient estimates are reasonable. For host_total_listings_count, minimum_nights, unitBed, they are not significant in fixed effect because they are been included in random effect, if I ignore the difference between cities, their estimates will be significant.
 
 The reason for this problem maybe there exists some unreasonable observations in this big data set, or these three variables have little impact on rent price by themselves.
+
+For the next step, because I ignored many review information which may have impacts on rent price, I will try to consider more review criteria and try to improve my model.  
 
 
 ## Citation
