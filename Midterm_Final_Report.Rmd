@@ -2,7 +2,9 @@
 title: "Final_Report"
 author: "Shuting Li"
 date: "11/26/2021"
-output: pdf_document
+output:
+  pdf_document:
+    latex_engine: xelatex
 ---
 
 ```{r setup, include=FALSE}
@@ -19,8 +21,10 @@ tidyverse,
 gridExtra,
 lme4,
 lmerTest,
+broom,
 coefplot,
-GGally
+GGally,
+lattice
 )
 ```
 
