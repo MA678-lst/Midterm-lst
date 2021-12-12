@@ -1,0 +1,259 @@
+---
+title: "Final_Report"
+author: "Shuting Li"
+date: "11/26/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(
+ggplot2,
+tidyr,
+arm,
+stringr,
+rstan,
+rstanarm,
+dplyr,
+tidyverse,
+gridExtra,
+lme4,
+lmerTest,
+coefplot
+)
+```
+
+## Abstract
+#问题+研究+结果
+Because of its creativity and good-privacy, Airbnb has becoming the most popular choice when we traveling. Here I explore the Airbnb rent data from ten cities and built multilevel model to predict price. 
+ 
+ 
+## Introduction
+
+When we plan our travel, we look through Airbnb's website and try to find a balance between the comfort and the price of a house. We choose the location of the house, decide the room type we preferred, check the reviews of these houses, and so on. There will be a lot of work to do the comparison, so if we know what factors will influence the renting price, we can easily find a suitable house within our budgets.
+  
+Here I explore Airbnb's rent data from ten main cities, and considering about the diversity of cities, I use the multilevel model to analyze the price of a renting house.
+  
+  
+## Method
+
+### Data Cleaning and Processing
+
+The data set I used is published on [Kaggle: Airbnb Listings & Reviews] (https://www.kaggle.com/mysarahmadbhat/airbnb-listings-reviews). It includes the rent data for 250000+ listings in 10 main cities. The prices are in local currency.
+
+Firstly, to clean this big data set, I removed the useless variables, and then dropped all the NA rows of reviews, because there exists fake prices, like 10000 dollar per night, for houses never been rent.
+Secondly, for comparison, I changed the prices units from local currency to dollar.
+Thirdly, I removed impossible values of prices and other variables, for example, 0 of price, 1000 minimum booking nights.
+Then, I checked the correlations of these variables, only 14 variables have high correlations with price. And because of the high correlations of accommodates and bedrooms, I used a new variable, unit bed, which is accommodates divided by bedrooms, to represent them. For 7 kinds of review scores, I only picked the review_scores_rating to represent them.
+  
+Finally, I got the cleaned data set with 167988 observations, the variables I used to do the analysis are:
+  
+| column names                   | explanation |
+| :--:                           | :----- |
+| listing_id                     | House ID|
+| host_total_listings_count      | Total listings the Host has in Airbnb |
+| city                           | City the Listing is in |
+| room_type                      | Type of room type in Airbnb for the Listing |
+| accommodates                   | Guests the Listing accommodates |
+| bedrooms                       | Bedrooms in the Listing |
+| price                          | Listing price (in each country's currency)|
+| minimum_nights                 | Minimum nights per booking |
+| review_scores_rating           | Listing's overall rating (out of 100) |
+
+```{r,include=FALSE}
+Listings <- read.csv("~/Desktop/BU-2021fall/MA678-statistic models/midterm project/data/Airbnb Data/Listings.csv")
+
+################## deal with NA and unimportant columns ##########################
+df <- Listings[,-c(2,3,4,5,6,7,8,13,16,17,25)] 
+df <- na.omit(df)
+
+################## change price to dollar ##########################
+df[which(df$city=="Bangkok"),]$price <- df[which(df$city=="Bangkok"),]$price* 0.03
+df[which(df$city=="Cape Town"),]$price <- df[which(df$city=="Cape Town"),]$price* 0.06
+df[which(df$city=="Hong Kong"),]$price <- df[which(df$city=="Hong Kong"),]$price* 0.13
+df[which(df$city=="Istanbul"),]$price <- df[which(df$city=="Istanbul"),]$price* 0.07
+df[which(df$city=="Mexico City"),]$price <- df[which(df$city=="Mexico City"),]$price* 0.047
+df[which(df$city=="Paris"),]$price <- df[which(df$city=="Paris"),]$price* 1.13
+df[which(df$city=="Rio de Janeiro"),]$price <- df[which(df$city=="Rio de Janeiro"),]$price* 0.176
+df[which(df$city=="Rome"),]$price <- df[which(df$city=="Rome"),]$price* 0.227
+df[which(df$city=="Sydney"),]$price <- df[which(df$city=="Sydney"),]$price* 0.7
+df$price_log <- log(df$price)
+
+################## deal with outliers ##########################
+df <- df[which(df$price != 0),]
+outliers <- boxplot(df$price_log, plot=FALSE)$out
+df1 <- df[-which(df$price_log %in% outliers),]
+outliers1 <- boxplot(df1$price_log, plot=FALSE)$out
+df2 <- df1[-which(df1$price_log %in% outliers1),]
+outliers2 <- boxplot(df2$price_log, plot=FALSE)$out
+
+df2 <- df2[which(df2$minimum_nights<366),]
+df2 <- df2[which(df2$host_total_listings_count<=386),]
+```
+
+```{r,include=FALSE}
+################## check numeric variables' correlations ##########################
+ggpairs(df2[, c(3,10,11,13,14)])
+ggpairs(df2[, c(13,15:22)])
+df2$unitBed <- df2$accommodates / df2$bedrooms
+```
+
+
+### Exploratory Data Analysis
+
+Because price, listings the Host has, unit bed are have a few large values which will influent the analysis, so I took log of these three variables.
+   
+Then I draw scatter plot to see which factor has a relationship with price, and whether it shows different patterns in different cities. 
+   
+
+```{r,echo=FALSE, message=FALSE,fig.height=4, fig.width= 10,fig.cap="correlation between listing counts and price"}
+ggplot(df2)+
+  aes(x=log(host_total_listings_count+1), y=log(price),color=city)+
+  geom_point(alpha=0.3)+
+  geom_smooth(se=FALSE, method = "lm")+
+  labs(title="Total listings the Host has vs rent price",x="log(host_total_listings_count)",y="log(price)")
+```
+Figure 1 shows the relationship between listings the Host has and prices. There exists difference in slope for different cities. In most cities, listing counts show positive influence on price, but in 3 cities, the situations are opposite. 
+
+
+```{r,echo=FALSE, message=FALSE,fig.height=4, fig.width= 10,fig.cap="correlation between minimum nights and price"}
+ggplot(df2)+
+  aes(x=minimum_nights, y=log(price),color=city)+
+  geom_point(alpha=0.3)+
+  geom_smooth(se=FALSE, method = "lm")+
+  labs(title="Minimum nights per booking vs rent price",x="minimum_nights",y="log(price)") #expect has small coef
+```
+Figure 2 shows the relationship between minimum nights per booking and prices. From this plot we can see in most cities, Minimum nights has little influence on price, but in Cape Town, it shows obviously positive influence on price, in Rome, Minimum nights has slightly negative influence on price.
+
+
+```{r,echo=FALSE, message=FALSE,fig.height=4, fig.width= 10,fig.cap="correlation between accommodates per Bedroom and price"}
+ggplot(df2)+
+  aes(x=log(unitBed), y=log(price),color=city)+
+  geom_point()+
+  geom_smooth(se=FALSE, method = "lm")+
+  labs(title="Accommodates per Bedroom vs rent price",x="log(accommodates per Bedroom)",y="log(price)")
+```
+Figure 3 shows the relationship between accommodates per Bedroom and prices. The lines in this plot show the same increase pattern with different slopes of different cities. When accommodates per Bedroom increases, which means the bedroom is likely to be big, so the price will increase.
+
+
+```{r,echo=FALSE, message=FALSE,fig.height=4, fig.width= 10,fig.cap="correlation between Rating scores / room type and price"}
+y4 <- ggplot(df2)+
+  aes(x=review_scores_rating, y=log(price),color=city)+
+  geom_point()+
+  geom_smooth(se=FALSE, method = "lm")+
+  labs(title="Rating scores vs rent price",x="review_scores_rating",y="log(price)")
+
+y5 <- ggplot(df2)+
+  aes(x=room_type, y=log(price),color=city)+
+  geom_boxplot()+
+  labs(title="room_type vs rent price",x="room_type",y="log(price)")
+
+grid.arrange(y4,y5,ncol=1)
+```
+Figure 4 shows the correlations of Rating scores and room type with prices. From these two plots, we can see in different cities, the rating scores and room type show almost same influence on price, so I set rating scores and room type as group predictors.
+
+
+## Model Fitting
+
+Considering the price performances in different cities, I used the multilevel model to fit the price. And for variables with big tail, like host_total_listings_count, unitBed and price, I took log of them. From the correlation test (see Appendix), I choose the host_total_listings_count, minimum_nights, unitBed, room_type, review_scores_rating as predicotrs. What's more, from the EDA, because the first three variables show different correlations with price in different cities, so I set varying slope for them. As for room_type and review_scores_rating, I treated them as group predictors.
+
+Finally, the model is:
+
+```{r}
+model <- lmer(price_log ~ log(host_total_listings_count+1)+ minimum_nights+ log(unitBed) + room_type + review_scores_rating + (1+log(host_total_listings_count+1)+minimum_nights+log(unitBed)|city), df2)
+```
+
+The fixed effect shows below:
+
+|                                   | Estimate  |Std. Error | df        |t value  | Pr(>|t|)    |
+|:---:                              |:---:      |:---:      |:---:      |:---:    |:---:        |
+|(Intercept)                        | 3.658e+00 | 1.464e-01 | 2.713e+01 |  24.981 |  <2e-16 *** |
+|log(host_total_listings_count + 1) | 2.083e-02 | 1.472e-01 | 1.201e+03 |   0.141 |   0.888     |
+|minimum_nights                     |-3.242e-04 | 7.893e-04 | 7.431e-01 |  -0.411 |   0.769     |
+|log(unitBed)                       | 1.024e-01 | 2.102e-01 | 6.133e+01 |   0.487 |   0.628     |
+|room_typeHotel room                |-1.365e-01 | 1.057e-02 | 1.667e+05 | -12.916 |  <2e-16 *** |
+|room_typePrivate room              |-7.117e-01 | 3.653e-03 | 1.667e+05 |-194.800 |  <2e-16 *** |
+|room_typeShared room               |-1.146e+00 | 1.326e-02 | 1.667e+05 | -86.465 |  <2e-16 *** |
+|review_scores_rating               | 3.922e-03 | 1.517e-04 | 1.667e+05 |  25.860 |  <2e-16 *** |
+
+
+## Result
+
+### Model Coefficients
+
+Take New York as example here, we can conclude this formula: 
+
+$$log(price)= 4.5 + 0.073\cdot log(host\_total\_listings\_count + 1) + 0.00046\cdot minimum\_nights + 0.18\cdot log(unitBed) \\& - 0.14\cdot Hotel\_room - 0.71\cdot Private\_room -1.14\cdot Shared\_room+ 0.004\cdot review\_scores\_rating$$
+In New York, for host who has no other listing, and Entire place type of listing which has no limit on minimum booking nights and best rating scores, the expected price is $134. It matches the price we can find in the website. For the first three variables, host_total_listings_count, minimum_nights and unitBed, their coefficients are cross 0, which means their impact on price are depend on cities. For example, in New York, they all have positive impact on price, but in Hong Kong, host_total_listings_count and minimum_nights show negative impacts, it's hard to interpret because these three variables are not significant. 
+
+Because room type and rating scores are group predictors, they show constant impact on price in different cities.
+When rating scores increases, the rent price increases. And in four types of room type, the entire place has highest price, the hotel room follows, and the shared room is the cheapest.
+
+### Model Validation
+
+```{r,echo=FALSE, fig.height=2.5, fig.width=6, fig.cap="Residual plot and Q-Q plot."}
+resi <- plot(mllm)
+qq <- qqmath(mllm) 
+grid.arrange(resi,qq,nrow=1)
+```
+From the residual plot, we can see most points are around 0, but it also shows some limits on the residual points, it may because the rent price can not be very high or very low, so the fitted model has shrink effect. It also influent the QQ plot, we can see when price becomes high, the point goes away from lines.
+
+
+## Discussion
+
+In this model, the room type and rating scores show significant impacts on price, and their coefficient estimates are reasonable. For host_total_listings_count, minimum_nights, unitBed, they are not significant in fixed effect because they are been included in random effect, if I ignore the difference between cities, their estimates will be significant.
+
+The reason for this problem maybe there exists some unreasonable observations in this big data set, or these three variables have little impact on rent price by themselves.
+
+
+## Citation
+
+Mixed Models: Diagnostics and Inference. 
+https://www.ssc.wisc.edu/sscc/pubs/MM/MM_DiagInfer.html
+
+R DATA ANALYSIS EXAMPLES|MIXED EFFECTS LOGISTIC REGRESSION. https://stats.idre.ucla.edu/r/dae/mixed-effects-logistic-regression/
+
+
+
+## Appendix
+
+### Check Price Distribution 
+```{r}
+# visualize the new data set without outliers
+boxplot((df2$price_log), col = "thistle2", horizontal = T, 
+        main = "After Removing Outliers")
+```
+
+### Correlation Test
+```{r}
+ggpairs(df2[, c(3,10,11,13,14)])
+ggpairs(df2[, c(13,15:22)])
+
+################## variables have little correlations with price ##########################
+n1 <- ggplot(df2)+
+  aes(x=host_is_superhost, y=log(price))+
+  geom_boxplot()
+
+n2 <- ggplot(df2)+
+  aes(x=host_has_profile_pic, y=log(price))+
+  geom_boxplot()
+
+n3 <- ggplot(df2)+
+  aes(x=host_identity_verified, y=log(price))+
+  geom_boxplot()
+
+n4 <- ggplot(df2)+
+  aes(x=factor(instant_bookable), y=log(price))+
+  geom_boxplot()
+grid.arrange(n1,n2,n3,n4,ncol=2)
+```
+
+### Random Effect
+
+```{r}
+mllmF <- fortify.merMod(model)
+ggplot(mllmF, aes(city,.resid)) + geom_boxplot() + coord_flip()
+
+coefplot(model)
+```
+
