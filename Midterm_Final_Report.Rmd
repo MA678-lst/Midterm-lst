@@ -24,7 +24,8 @@ lmerTest,
 broom,
 coefplot,
 GGally,
-lattice
+lattice,
+amsmath
 )
 ```
 
@@ -52,9 +53,9 @@ Thirdly, I removed impossible values of prices and other variables, for example,
 Then, I checked the correlations of these variables, only 14 variables have high correlations with price. And because of the high correlations of accommodates and bedrooms, I used a new variable, unit bed, which is accommodates divided by bedrooms, to represent them. For 7 kinds of review scores, I only picked the review_scores_rating to represent them.
   
 Finally, I got the cleaned data set with 167988 observations, the variables I used to do the analysis are:
-  
+\newpage  
 | column names                   | explanation |
-| :--:                           | :----- |
+| :--:                           | :-----         |
 | listing_id                     | House ID|
 | host_total_listings_count      | Total listings the Host has in Airbnb |
 | city                           | City the Listing is in |
@@ -121,7 +122,8 @@ ggplot(df2)+
 Figure 1 shows the relationship between listings the Host has and prices. There exists difference in slope for different cities. In most cities, listing counts show positive influence on price, but in 3 cities, the situations are opposite. 
 
 
-```{r,echo=FALSE, message=FALSE,fig.height=4, fig.width= 10,fig.cap="correlation between minimum nights and price"}
+
+```{r,echo=FALSE, message=FALSE,fig.height=4, fig.width= 10, fig.cap="correlation between minimum nights and price"}
 ggplot(df2)+
   aes(x=minimum_nights, y=log(price),color=city)+
   geom_point(alpha=0.3)+
@@ -129,6 +131,7 @@ ggplot(df2)+
   labs(title="Minimum nights per booking vs rent price",x="minimum_nights",y="log(price)") #expect has small coef
 ```
 Figure 2 shows the relationship between minimum nights per booking and prices. From this plot we can see in most cities, Minimum nights has little influence on price, but in Cape Town, it shows obviously positive influence on price, in Rome, Minimum nights has slightly negative influence on price.
+
 
 
 ```{r,echo=FALSE, message=FALSE,fig.height=4, fig.width= 10,fig.cap="correlation between accommodates per Bedroom and price"}
@@ -139,6 +142,7 @@ ggplot(df2)+
   labs(title="Accommodates per Bedroom vs rent price",x="log(accommodates per Bedroom)",y="log(price)")
 ```
 Figure 3 shows the relationship between accommodates per Bedroom and prices. The lines in this plot show the same increase pattern with different slopes of different cities. When accommodates per Bedroom increases, which means the bedroom is likely to be big, so the price will increase.
+
 
 
 ```{r,echo=FALSE, message=FALSE,fig.height=4, fig.width= 10,fig.cap="correlation between Rating scores / room type and price"}
@@ -164,8 +168,10 @@ Considering the price performances in different cities, I used the multilevel mo
 
 Finally, the model is:
 
-```{r,eval=FALSE,warning=FALSE}
-model <- lmer(price_log ~ log(host_total_listings_count+1)+ minimum_nights+ log(unitBed) + room_type + review_scores_rating + (1+log(host_total_listings_count+1)+minimum_nights+log(unitBed)|city), df2)
+```{r,warning=FALSE}
+model <- lmer(price_log ~ log(host_total_listings_count+1)+ minimum_nights+ 
+                log(unitBed) + room_type + review_scores_rating +
+    (1+log(host_total_listings_count+1)+minimum_nights+log(unitBed)|city), df2)
 ```
 
 The fixed effect shows below:
@@ -187,8 +193,12 @@ The fixed effect shows below:
 ### Model Coefficients
 
 Take New York as example here, we can conclude this formula: 
+$$
+\begin{aligned}
+log(price)= 4.5 + 0.073\cdot log(host\_total\_listings\_count + 1) + 0.00046\cdot minimum\_nights + 0.18\cdot log(unitBed)\\ - 0.14\cdot Hotel\_room - 0.71\cdot Private\_room -1.14\cdot Shared\_room+ 0.004\cdot review\_scores\_rating
+\end{aligned}
+$$
 
-$$log(price)= 4.5 + 0.073\cdot log(host\_total\_listings\_count + 1) + 0.00046\cdot minimum\_nights + 0.18\cdot log(unitBed) \\& - 0.14\cdot Hotel\_room - 0.71\cdot Private\_room -1.14\cdot Shared\_room+ 0.004\cdot review\_scores\_rating$$
 In New York, for host who has no other listing, and Entire place type of listing which has no limit on minimum booking nights and best rating scores, the expected price is $134. It matches the price we can find in the website. For the first three variables, host_total_listings_count, minimum_nights and unitBed, their coefficients are cross 0, which means their impact on price are depend on cities. For example, in New York, they all have positive impact on price, but in Hong Kong, host_total_listings_count and minimum_nights show negative impacts, it's hard to interpret because these three variables are not significant. 
 
 Because room type and rating scores are group predictors, they show constant impact on price in different cities.
